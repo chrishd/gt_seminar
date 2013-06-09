@@ -1,12 +1,12 @@
 # function titfortat
-# parameters: history (list of tupels)
+# parameters: game (string), history (list of tupels)
 # returns: "a" or "b" (string)
 #
 # This function implements the strategy tit-for-tat
 # which mirrors the other player's last action,
 # starting with "a" if the history is empty.
 #
-def move(history):
+def move(game, player, history):
 	if not history:
 		return "a"
 	else:

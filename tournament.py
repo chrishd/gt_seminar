@@ -5,6 +5,7 @@ import argparse
 import os
 import sys
 import random
+import time
 
 # used for error message
 status = {"strategyA": "dummyA", "strategyB": "dummyB", "move": 0}
@@ -35,8 +36,8 @@ def determine_payoff(game,p1Act,p2Act):
 # 			newly appended histories for players 1 and 2
 #
 def play(game, f1, f2, his1, his2):
-	p1Action = f1(his1) # determine player 1's action
-	p2Action = f2(his2) # and player2's.
+	p1Action = f1(game, 1, his1) # determine player 1's action
+	p2Action = f2(game, 2, his2) # and player2's.
 	if (p1Action != "a" and p1Action != "b"):
 		sys.exit("Illegal move in strategy " + status["strategyA"] + " in move " + str(status["move"]))
 	if (p2Action != "a" and p2Action != "b"):
@@ -60,7 +61,7 @@ def determine_rounds():
 
 # function one_on_one 
 # parameters: a (function), b (function), rounds (int), game (string)
-# returns: returns a 4-element list containing sum of strategyA payoff, sum of strategyB payoff,
+# returns: returns a 4-element list containing average of strategyA payoff, average of strategyB payoff,
 #		   history1, history2 (each with the first element beeing the respective strategy
 #
 def one_on_one(a, b, rounds, game):
@@ -71,19 +72,28 @@ def one_on_one(a, b, rounds, game):
 	AccPayOff = []
 
 	# play the game
-	for i in range(1, rounds):
+	for i in range(rounds):
 		status["move"] = i
 		Result = play(game, a, b, history1, history2) # play the round
 		AccPayOff.append(Result[0]) # first collect all payoffs, sum up later
-		history1 = Result[1] # update histories after decision have been made
+		history1 = Result[1] # update histories after decisions have been made
 		history2 = Result[2]
 
 	# calculate payoffs
 	for poff in AccPayOff:
 		sumA = sumA+poff[0] # sum up all payoffs of player 1 
 		sumB = sumB+poff[1] # and player 2
+
+	avgA = sumA/float(rounds)
+	avgB = sumB/float(rounds)
+
+	#print sumA
+	#print sumB
+	#print rounds
+	#print avgA
+	#print avgB
 	
-	return (sumA, sumB, history1, history2)
+	return (avgA, avgB, history1, history2)
 
 # function run_tournement
 # parameters: game (string), rounds (int array)
@@ -111,6 +121,7 @@ def run_tournement(game, rounds):
 		for i in results.keys():
 			histories[i] = {}
 
+		tournament_start = time.time()
 		# play tournement
 		for i in results.keys():
 			for n in results.keys():
@@ -121,24 +132,40 @@ def run_tournement(game, rounds):
 				status["strategyA"] = i
 				status["strategyB"] = n
 				# Play 100 times
-				for c in range(len(rounds) - 1):
+
+				print "playing " + str(len(rounds)) + " iterations of " + i + " against " + n + "..."
+				round_start = time.time()
+				for c in range(len(rounds)):
 					(resultA, resultB, historyA, historyB) = one_on_one(strategies[i], strategies[n], rounds[c], game)
 					results[i] += resultA
 					results[n] += resultB
 					histories[i][n].append(historyA)
 					histories[n][i].append(historyA)
-				print i + " played against " + n + " with result: " + str(results[i]) + "," + str(results[n])
-				
-		print ""
+					#print "run " + str(c+1) + ": " + i + " played " + str(rounds[c]) + " rounds against " + n + " with average results: " + str(resultA) + "," + str(resultB)		
+				print "...which took "+ str(time.time()-round_start)+" seconds"
+				print ""
 
+		print "Finished. Tournament took "+str(time.time()-tournament_start) + " seconds to run."
+
+		print ""
 		# write histories to file
-		## write_histories(histories, os.path.join(os.curdir, "game_details"))
+		##write_histories(histories, os.path.join(os.curdir, "game_details"))
 
 		# print results
-		ordered_results = sorted(results.items(), key = key_fun(), reverse = True)
-		for result in ordered_results:
-			print result[0] + ": " + str(result[1])
+		print "Leaderboard ("+str(game)+"):"  
 
+		if (game == "prison"): 
+			rev = False 
+		else: 
+			rev = True
+
+		count = 1
+		ordered_results = sorted(results.items(), key = key_fun(), reverse = rev)
+		for result in ordered_results:
+			print str(count)+ ". " + result[0] + ": " + str(result[1]/GAME_ITERATIONS) # print average payoff of 100 round robins
+			count += 1
+
+		print ""	
 # function write_histories 
 # writes history in a human readable format to disk - I don't particular like the format
 # for further processing though
@@ -180,7 +207,7 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	rounds = []
-	for i in range(GAME_ITERATIONS - 1):
+	for i in range(GAME_ITERATIONS):
 		if args.n == 0:
 			rounds.append(determine_rounds())
 		else:

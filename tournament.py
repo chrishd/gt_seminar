@@ -11,6 +11,7 @@ import time
 status = {"strategyA": "dummyA", "strategyB": "dummyB", "move": 0}
 # defines how often two players play against each other
 GAME_ITERATIONS = 100
+ROUNDS = 1000
 
 # function determine_payoff
 # parameters: game, p1Act, p2Act (all string) 
@@ -42,9 +43,10 @@ def play(game, f1, f2, his1, his2):
 		sys.exit("Illegal move in strategy " + status["strategyA"] + " in move " + str(status["move"]))
 	if (p2Action != "a" and p2Action != "b"):
 		sys.exit("Illegal move in strategy " + status["strategyB"] + " in move " + str(status["move"]))
-	his1.append([p1Action,p2Action]) # add decisions to history of player 1
-	his2.append([p2Action,p1Action]) # and 2
 	payoff = determine_payoff(game,p1Action,p2Action) # determine payoff
+	his1.append([p1Action,p2Action,str(payoff[0]),str(payoff[1])]) # add decisions to history of player 1
+	his2.append([p2Action,p1Action,str(payoff[1]),str(payoff[0])]) # and 2
+
 	return [payoff,his1,his2]; # return payoff-tupel and appended histories as a three-element list
 
 # function determine_rounds
@@ -54,7 +56,7 @@ def play(game, f1, f2, his1, his2):
 # returns: number of rounds 
 #
 def determine_rounds():
-	i = 1000
+	i = ROUNDS
 	while random.randint(0, 9) != 0:
 		i += 1
 	return i
@@ -70,7 +72,10 @@ def one_on_one(a, b, rounds, game):
 	sumA = 0
 	sumB = 0
 	AccPayOff = []
+        myAccPayOff = [] # coolects the payoffs in a format (A:[payoff per round], B:[...])
 
+        myAccPayOffA = [] #helper lists
+        myAccPayOffB = []
 	# play the game
 	for i in range(rounds):
 		status["move"] = i
@@ -78,7 +83,9 @@ def one_on_one(a, b, rounds, game):
 		AccPayOff.append(Result[0]) # first collect all payoffs, sum up later
 		history1 = Result[1] # update histories after decisions have been made
 		history2 = Result[2]
-
+                myAccPayOffA.append(Result[0][0])
+                myAccPayOffB.append(Result[0][1])
+        myAccPayOff = (myAccPayOffA, myAccPayOffB);
 	# calculate payoffs
 	for poff in AccPayOff:
 		sumA = sumA+poff[0] # sum up all payoffs of player 1 
@@ -93,7 +100,7 @@ def one_on_one(a, b, rounds, game):
 	#print avgA
 	#print avgB
 	
-	return (avgA, avgB, history1, history2)
+	return (avgA, avgB, history1, history2, myAccPayOff)
 
 # function run_tournement
 # parameters: game (string), rounds (int array)
@@ -101,6 +108,8 @@ def one_on_one(a, b, rounds, game):
 def run_tournement(game, rounds):
 	results = {}
 	strategies = {}
+        d_mem_payoff = {}
+        d_accPayoff = {} #saves the payoffs for each strategy for each round summed up over all iterations
 	histories = {} # histories[strategy][opposing_strategy][game] 
 				   #  -> history array [move_strategy, move_opposing_strategy]
 	strategiesFolder = os.path.abspath(os.path.join(os.curdir, "strategies")) # find strategies in this folder
@@ -120,8 +129,15 @@ def run_tournement(game, rounds):
 		# initialize histories
 		for i in results.keys():
 			histories[i] = {}
+                        d_mem_payoff[i] = {}
+                        d_accPayoff[i] = {}
+
 
 		tournament_start = time.time()
+
+                #Initalize array to remember payoffs
+                
+
 		# play tournement
 		for i in results.keys():
 			for n in results.keys():
@@ -129,27 +145,63 @@ def run_tournement(game, rounds):
 					break
 				histories[i][n] = []
 				histories[n][i] = []
+                                d_accPayoff[i][n] = [0 for k in range(ROUNDS)]
+                                d_accPayoff[n][i] = [0 for k in range(ROUNDS)]
 				status["strategyA"] = i
 				status["strategyB"] = n
 				# Play 100 times
 
 				print "playing " + str(len(rounds)) + " iterations of " + i + " against " + n + "..."
 				round_start = time.time()
+
+                                #result for one match
+                                match_resultA = 0
+                                match_resultB = 0
+
+                                #plays the game GAME_ITERATION times
 				for c in range(len(rounds)):
-					(resultA, resultB, historyA, historyB) = one_on_one(strategies[i], strategies[n], rounds[c], game)
+                                        #plays the game
+					(resultA, resultB, historyA, historyB, accPayoff) = one_on_one(strategies[i], strategies[n], rounds[c], game)
+                                        match_resultA += resultA
+                                        match_resultB += resultB
 					results[i] += resultA
 					results[n] += resultB
 					histories[i][n].append(historyA)
 					histories[n][i].append(historyA)
+                                        #sum up all payoffs per round over iterations
+                                        d_accPayoff[i][n] = [d_accPayoff[i][n][k] + accPayoff[0][k] for k in range(ROUNDS)]
+                                        d_accPayoff[n][i] = [d_accPayoff[n][i][k] + accPayoff[1][k] for k in range(ROUNDS)]
 					#print "run " + str(c+1) + ": " + i + " played " + str(rounds[c]) + " rounds against " + n + " with average results: " + str(resultA) + "," + str(resultB)		
+                                match_resultA /= GAME_ITERATIONS
+                                match_resultB /= GAME_ITERATIONS
 				print "...which took "+ str(time.time()-round_start)+" seconds"
 				print ""
 
-		print "Finished. Tournament took "+str(time.time()-tournament_start) + " seconds to run."
+                                d_mem_payoff[i][n] = match_resultA
+                                d_mem_payoff[n][i] = match_resultB
 
-		print ""
+		print "Finished. Tournament took "+str(time.time()-tournament_start) + " seconds to run.\n"
+                
+#                print d_accPayoff['rando']['tft']
+
+                #Print payoff matrix
+                row1 = "\t"
+                for i in results.keys():
+                    row1 += i + "\t"
+		print row1
+
+                for i in results.keys(): 
+                    row = i
+                    for n in results.keys(): 
+                        if i != n:
+                            row += "\t" + "%0.2f" % float(d_mem_payoff[i][n])
+                        else:
+                            row += "\t ---" 
+                    print row
+                print "\n"
+
 		# write histories to file
-		##write_histories(histories, os.path.join(os.curdir, "game_details"))
+		write_histories(histories, os.path.join(os.curdir, "game_details"))
 
 		# print results
 		print "Leaderboard ("+str(game)+"):"  
